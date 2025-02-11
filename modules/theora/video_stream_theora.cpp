@@ -260,6 +260,9 @@ void VideoStreamPlaybackTheora::clear() {
 		vorbis_comment_clear(&vc);
 		vorbis_info_clear(&vi);
 		ogg_stream_clear(&vo);
+		if (audio_buffer_size) {
+			memdelete_arr(audio_buffer);
+		}
 	}
 	if (has_video) {
 		th_decode_free(td);
@@ -269,6 +272,7 @@ void VideoStreamPlaybackTheora::clear() {
 		ogg_sync_clear(&oy);
 	}
 
+	audio_buffer = nullptr;
 	playing = false;
 	has_video = false;
 	has_audio = false;
@@ -455,6 +459,8 @@ void VideoStreamPlaybackTheora::set_file(const String &p_file) {
 	if (has_audio) {
 		vorbis_synthesis_init(&vd, &vi);
 		vorbis_block_init(&vd, &vb);
+		audio_buffer_size = MIN(vi.channels, 8) * 1024;
+		audio_buffer = memnew_arr(float, audio_buffer_size);
 	}
 
 	stream_data_offset = file->get_position() - oy.fill + oy.returned;
@@ -521,7 +527,7 @@ void VideoStreamPlaybackTheora::update(double p_delta) {
 			if (ret > 0) {
 				int frames_read = 0;
 				while (frames_read < ret) {
-					int m = MIN(AUXBUF_LEN / vi.channels, ret - frames_read);
+					int m = MIN(audio_buffer_size / vi.channels, ret - frames_read);
 					int count = 0;
 					for (int j = 0; j < m; j++) {
 						for (int i = 0; i < vi.channels; i++) {
