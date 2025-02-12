@@ -35,6 +35,7 @@
 #include "scene/resources/image_texture.h"
 
 #include "thirdparty/misc/yuv2rgb.h"
+#include <sys/time.h>
 
 int VideoStreamPlaybackTheora::buffer_data() {
 	char *buffer = ogg_sync_buffer(&oy, 4096);
@@ -237,6 +238,8 @@ void VideoStreamPlaybackTheora::video_write(th_ycbcr_buffer yuv) {
 	uint32_t y_offset = region.position.y * yuv[0].stride + region.position.x;
 	uint32_t uv_offset = region.position.y * yuv[1].stride + region.position.x;
 
+	struct timeval stop, start;
+	gettimeofday(&start, nullptr);
 	if (px_fmt == TH_PF_444) {
 		yuv444_2_rgb8888((uint8_t *)dst, (uint8_t *)yuv[0].data + y_offset, (uint8_t *)yuv[1].data + uv_offset, (uint8_t *)yuv[2].data + uv_offset, region.size.x, region.size.y, yuv[0].stride, yuv[1].stride, region.size.x << 2);
 	} else if (px_fmt == TH_PF_422) {
@@ -244,10 +247,18 @@ void VideoStreamPlaybackTheora::video_write(th_ycbcr_buffer yuv) {
 	} else if (px_fmt == TH_PF_420) {
 		yuv420_2_rgb8888((uint8_t *)dst, (uint8_t *)yuv[0].data + y_offset, (uint8_t *)yuv[1].data + uv_offset, (uint8_t *)yuv[2].data + uv_offset, region.size.x, region.size.y, yuv[0].stride, yuv[1].stride, region.size.x << 2);
 	}
+	gettimeofday(&stop, nullptr);
+	printf("color conversion: %lu us\n", (stop.tv_sec - start.tv_sec) * 1000000 + stop.tv_usec - start.tv_usec);
 
+	gettimeofday(&start, nullptr);
 	Ref<Image> img = memnew(Image(region.size.x, region.size.y, false, Image::FORMAT_RGBA8, frame_data)); //zero copy image creation
+	gettimeofday(&stop, nullptr);
+	printf("image creation: %lu us\n", (stop.tv_sec - start.tv_sec) * 1000000 + stop.tv_usec - start.tv_usec);
 
+	gettimeofday(&start, nullptr);
 	texture->update(img); //zero copy send to rendering server
+	gettimeofday(&stop, nullptr);
+	printf("texture update: %lu us\n", (stop.tv_sec - start.tv_sec) * 1000000 + stop.tv_usec - start.tv_usec);
 }
 
 void VideoStreamPlaybackTheora::clear() {
@@ -561,7 +572,11 @@ void VideoStreamPlaybackTheora::update(double p_delta) {
 					th_decode_ctl(td, TH_DECCTL_SET_GRANPOS, &op.granulepos, sizeof(op.granulepos));
 				}
 				int64_t videobuf_granulepos;
+				struct timeval stop, start;
+				gettimeofday(&start, nullptr);
 				int ret = th_decode_packetin(td, &op, &videobuf_granulepos);
+				gettimeofday(&stop, nullptr);
+				printf("decode video: %lu us\n", (stop.tv_sec - start.tv_sec) * 1000000 + stop.tv_usec - start.tv_usec);
 				if (ret == 0 || ret == TH_DUPFRAME) {
 					next_frame_time = th_granule_time(td, videobuf_granulepos);
 					if (next_frame_time > comp_time) {
@@ -604,8 +619,12 @@ void VideoStreamPlaybackTheora::update(double p_delta) {
 	// Wait for the last frame to end before rendering the next one.
 	if (video_ready && comp_time >= current_frame_time) {
 		if (!dup_frame) {
+			struct timeval stop, start;
+			gettimeofday(&start, nullptr);
 			th_ycbcr_buffer yuv;
 			th_decode_ycbcr_out(td, yuv);
+			gettimeofday(&stop, nullptr);
+			printf("get yuv: %lu us\n", (stop.tv_sec - start.tv_sec) * 1000000 + stop.tv_usec - start.tv_usec);
 			video_write(yuv);
 		}
 		dup_frame = false;
