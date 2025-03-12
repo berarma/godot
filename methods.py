@@ -209,6 +209,10 @@ def get_cmdline_bool(option, default):
     else:
         return default
 
+def assign_default(env, option, default):
+    if option not in env:
+        env[option] = default
+    return env[option]
 
 def detect_modules(search_path, recursive=False):
     """Detects and collects a list of C++ modules at specified path

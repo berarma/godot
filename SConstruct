@@ -169,10 +169,10 @@ opts.Add(
         ("auto", "none", "custom", "debug", "speed", "speed_trace", "size"),
     )
 )
-opts.Add(BoolVariable("debug_symbols", "Build with debugging symbols", False))
+opts.Add(BoolVariable("debug_symbols", "Build with debugging symbols", None))
 opts.Add(BoolVariable("separate_debug_symbols", "Extract debugging symbols to a separate file", False))
 opts.Add(BoolVariable("debug_paths_relative", "Make file paths in debug symbols relative (if supported)", False))
-opts.Add(EnumVariable("lto", "Link-time optimization (production builds)", "none", ("none", "auto", "thin", "full")))
+opts.Add(EnumVariable("lto", "Link-time optimization (production builds)", None, ("none", "auto", "thin", "full")))
 opts.Add(BoolVariable("production", "Set defaults to build Godot for use in production", False))
 opts.Add(BoolVariable("threads", "Enable threading support", True))
 
@@ -197,7 +197,7 @@ opts.Add(
         "dev_mode", "Alias for dev options: verbose=yes warnings=extra werror=yes tests=yes strict_checks=yes", False
     )
 )
-opts.Add(BoolVariable("tests", "Build the unit tests", False))
+opts.Add(BoolVariable("tests", "Build the unit tests", None))
 opts.Add(BoolVariable("fast_unsafe", "Enable unsafe options for faster rebuilds", False))
 opts.Add(BoolVariable("ninja", "Use the ninja backend for faster rebuilds", False))
 opts.Add(BoolVariable("ninja_auto_run", "Run ninja automatically after generating the ninja file", True))
@@ -208,10 +208,10 @@ opts.Add(
     "Use up to N jobs when compiling (equivalent to `-j N`). Defaults to max jobs - 1. Ignored if -j is used.",
     "",
 )
-opts.Add(BoolVariable("verbose", "Enable verbose output for the compilation", False))
-opts.Add(BoolVariable("progress", "Show a progress indicator during compilation", True))
-opts.Add(EnumVariable("warnings", "Level of compilation warnings", "all", ("extra", "all", "moderate", "no")))
-opts.Add(BoolVariable("werror", "Treat compiler warnings as errors", False))
+opts.Add(BoolVariable("verbose", "Enable verbose output for the compilation", None))
+opts.Add(BoolVariable("progress", "Show a progress indicator during compilation", None))
+opts.Add(EnumVariable("warnings", "Level of compilation warnings", None, ("extra", "all", "moderate", "no")))
+opts.Add(BoolVariable("werror", "Treat compiler warnings as errors", None))
 opts.Add("extra_suffix", "Custom extra suffix added to the base filename of all generated binary files", "")
 opts.Add("object_prefix", "Custom prefix added to the base filename of all generated object files", "")
 opts.Add(BoolVariable("vsproj", "Generate a Visual Studio solution", False))
@@ -229,7 +229,7 @@ opts.Add(
     "",
 )
 opts.Add(BoolVariable("use_precise_math_checks", "Math checks use very precise epsilon (debug option)", False))
-opts.Add(BoolVariable("strict_checks", "Enforce stricter checks (debug option)", False))
+opts.Add(BoolVariable("strict_checks", "Enforce stricter checks (debug option)", None))
 opts.Add(BoolVariable("scu_build", "Use single compilation unit build", False))
 opts.Add("scu_limit", "Max includes per SCU file when using scu_build (determines RAM use)", "0")
 opts.Add(BoolVariable("engine_update_check", "Enable engine update checks in the Project Manager", True))
@@ -461,7 +461,8 @@ if env["optimize"] == "auto":
         opt_level = "speed"
     env["optimize"] = ARGUMENTS.get("optimize", opt_level)
 
-env["debug_symbols"] = methods.get_cmdline_bool("debug_symbols", env.dev_build)
+if env.dev_build:
+    methods.assign_default(env, "debug_symbols", env.dev_build)
 
 if env.editor_build:
     env.Append(CPPDEFINES=["TOOLS_ENABLED"])
@@ -491,7 +492,7 @@ env.Decider("MD5-timestamp")
 # Unsafe as they reduce the certainty of rebuilding all changed files, so it's
 # enabled by default for `debug` builds, and can be overridden from command line.
 # Ref: https://github.com/SCons/scons/wiki/GoFastButton
-if methods.get_cmdline_bool("fast_unsafe", env.dev_build):
+if methods.assign_default(env, "fast_unsafe", env.dev_build):
     env.SetOption("implicit_cache", 1)
     env.SetOption("max_drift", 60)
 
@@ -574,18 +575,22 @@ if env["build_profile"] != "":
 # 'dev_mode' and 'production' are aliases to set default options if they haven't been
 # set manually by the user.
 if env["dev_mode"]:
-    env["verbose"] = methods.get_cmdline_bool("verbose", True)
-    env["warnings"] = ARGUMENTS.get("warnings", "extra")
-    env["werror"] = methods.get_cmdline_bool("werror", True)
-    env["tests"] = methods.get_cmdline_bool("tests", True)
-    env["strict_checks"] = methods.get_cmdline_bool("strict_checks", True)
+    methods.assign_default(env, "warnings", ARGUMENTS.get("warnings", "extra")
+else:
+    methods.assign_default(env, "warnings", ARGUMENTS.get("warnings", "all")
+methods.assign_default(env, "verbose", env["dev_mode"])
+methods.assign_default(env, "werror", env["dev_mode"])
+methods.assign_default(env, "tests", env["dev_mode"])
+methods.assign_default(env, "strict_checks", env["dev_mode"])
+methods.assign_default(env, "use_static_cpp", env["production"])
+methods.assign_default(env, "debug_symbols", not env["production"])
 if env["production"]:
-    env["use_static_cpp"] = methods.get_cmdline_bool("use_static_cpp", True)
-    env["debug_symbols"] = methods.get_cmdline_bool("debug_symbols", False)
-    if env["platform"] == "android":
-        env["swappy"] = methods.get_cmdline_bool("swappy", True)
+    if env["android"]:
+        methods.assign_default(env, "swappy", True)
     # LTO "auto" means we handle the preferred option in each platform detect.py.
-    env["lto"] = ARGUMENTS.get("lto", "auto")
+    methods.assign_default(env, "lto", ARGUMENTS.get("lto", "auto"))
+else:
+    methods.assign_default(env, "lto", ARGUMENTS.get("lto", "auto"))
 
 if env["strict_checks"]:
     env.Append(CPPDEFINES=["STRICT_CHECKS"])
